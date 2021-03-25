@@ -5,13 +5,15 @@
  */
 package cc.util;
 
+import cc.ctrl.CtrlGeo;
 import cc.geosrv.Mercator;
 import java.awt.geom.Area;
 import java.awt.geom.PathIterator;
-import java.text.DecimalFormat;
 import java.util.BitSet;
 import cc.vector_tile.VectorTile;
 import java.awt.geom.Path2D;
+import java.util.ArrayList;
+import java.util.Iterator;
 
 
 /**
@@ -23,7 +25,7 @@ public abstract class TileUtil
 	public final static int MOVETO = 1;
 	public final static int LINETO = 2;
 	public final static int CLOSEPATH = 7;
-	public static DecimalFormat DF = new DecimalFormat("#");
+	
 	
 	public static int command(int nId, int nCount)
 	{
@@ -46,7 +48,8 @@ public abstract class TileUtil
 		return (int)Math.round((dVal - dMin) * dExtent / (dMax - dMin));
 	}
 	
-	public static void addPolygon(VectorTile.Tile.Feature.Builder oFeatureBuilder, int[] nCur, double[] dMercBounds, int nExtent,Area oPoly, int[] nPointBuffer)
+	
+	public static int[] addPolygon(VectorTile.Tile.Feature.Builder oFeatureBuilder, int[] nCur, double[] dMercBounds, int nExtent, Area oPoly, int[] nPointBuffer)
 	{		
 		double[] dCoords = new double[2];
 		double[] dPrev = new double[2];
@@ -92,7 +95,6 @@ public abstract class TileUtil
 		dPrev[0] = -1;
 		dPrev[1] = -1;
 		oIt = oPoly.getPathIterator(null);
-
 		while (!oIt.isDone()) // write polygons
 		{
 			if (oHoles.get(nBitIndex++)) // skip holes
@@ -108,7 +110,7 @@ public abstract class TileUtil
 					nPosY = getPos(dCoords[1], dMercBounds[1], dMercBounds[3], nExtent, true);
 					if (dCoords[0] != dPrev[0] || dCoords[1] != dPrev[1])
 					{
-						nPointBuffer = addPoint(nPointBuffer, nPosX, nPosY);
+						nPointBuffer = Arrays.add(nPointBuffer, nPosX, nPosY);
 						dTemp = dCoords;
 						dCoords = dPrev;
 						dPrev = dTemp;
@@ -144,7 +146,7 @@ public abstract class TileUtil
 					nPosY = getPos(dCoords[1], dMercBounds[1], dMercBounds[3], nExtent, true);
 					if (dCoords[0] != dPrev[0] || dCoords[1] != dPrev[1])
 					{
-						nPointBuffer = addPoint(nPointBuffer, nPosX, nPosY);
+						nPointBuffer = Arrays.add(nPointBuffer, nPosX, nPosY);
 						dTemp = dCoords;
 						dCoords = dPrev;
 						dPrev = dTemp;
@@ -158,16 +160,112 @@ public abstract class TileUtil
 			}
 			oIt.next();
 		}
+		
+		return nPointBuffer;
 	}
+
 	
-	
-	public static void addLinestring(VectorTile.Tile.Feature.Builder oFeatureBuilder, int[] nCur, double[] dMercBounds, int nExtent, double[] dLine, int[] nPointBuffer, int... nTags)
+	public static int[] addMercPolygon(VectorTile.Tile.Feature.Builder oFeatureBuilder, int[] nCur, double[] dBounds, int nExtent, double[] dLine, int[] nPointBuffer)
 	{
-		addLinestring(oFeatureBuilder, nCur, dMercBounds, nExtent, 0, dLine, nPointBuffer, nTags);
+		return addMercPolygon(oFeatureBuilder, nCur, dBounds, nExtent, 1, dLine, null, nPointBuffer);
 	}
 	
 	
-	public static void addLinestring(VectorTile.Tile.Feature.Builder oFeatureBuilder, int[] nCur, double[] dMercBounds, int nExtent, int nStartPos, double[] dLine, int[] nPointBuffer, int... nTags)
+	public static int[] addMercPolygon(VectorTile.Tile.Feature.Builder oFeatureBuilder, int[] nCur, double[] dBounds, int nExtent, double[] dLine, double[][] dHoles, int[] nPointBuffer)
+	{
+		return addMercPolygon(oFeatureBuilder, nCur, dBounds, nExtent, 1, dLine, dHoles, nPointBuffer);
+	}
+	
+	
+	public static int[] addMercPolygon(VectorTile.Tile.Feature.Builder oFeatureBuilder, int[] nCur, double[] dBounds, int nExtent, int nStartPos, double[] dLine, double[][] dHoles, int[] nPointBuffer)
+	{
+		int nPosX;
+		int nPosY;
+		double[] dCoords = new double[2];
+		nPointBuffer[0] = 1;
+		Iterator<double[]> oIt = Arrays.iterator(dLine, dCoords, nStartPos, 2);
+		while (oIt.hasNext())
+		{
+			oIt.next();
+			nPosX = getPos(dCoords[0], dBounds[0], dBounds[2], nExtent, false);
+			nPosY = getPos(dCoords[1], dBounds[1], dBounds[3], nExtent, true);
+
+			nPointBuffer = Arrays.add(nPointBuffer, nPosX, nPosY);
+		}
+		writePointBuffer(oFeatureBuilder, nPointBuffer, nCur, true);
+		nPointBuffer[0] = 1;
+		if (dHoles != null)
+		{
+			for (double[] dHole : dHoles)
+			{
+				oIt = Arrays.iterator(dHole, dCoords, nStartPos, 2);
+				while (oIt.hasNext())
+				{
+					oIt.next();
+					nPosX = getPos(dCoords[0], dBounds[0], dBounds[2], nExtent, false);
+					nPosY = getPos(dCoords[1], dBounds[1], dBounds[3], nExtent, true);
+
+					nPointBuffer = Arrays.add(nPointBuffer, nPosX, nPosY);
+				}
+				writePointBuffer(oFeatureBuilder, nPointBuffer, nCur, true);
+				nPointBuffer[0] = 1;
+			}
+		}
+		
+		
+		return nPointBuffer;
+	}
+	
+	
+	public static int[] addMercLinestring(VectorTile.Tile.Feature.Builder oFeatureBuilder, int[] nCur, double[] dBounds, int nExtent, double[] dLine, int[] nPointBuffer)
+	{
+		return addMercLinestring(oFeatureBuilder, nCur, dBounds, nExtent, 1, dLine, nPointBuffer);
+	}
+	
+	
+	public static int[] addMercLinestring(VectorTile.Tile.Feature.Builder oFeatureBuilder, int[] nCur, double[] dBounds, int nExtent, int nStartPos, double[] dLine, int[] nPointBuffer)
+	{
+		int nPosX;
+		int nPosY;
+		double[] dCoords = new double[2];
+		nPointBuffer[0] = 1;
+		Iterator<double[]> oIt = Arrays.iterator(dLine, dCoords, nStartPos, 2);
+		while (oIt.hasNext())
+		{
+			oIt.next();
+			nPosX = getPos(dCoords[0], dBounds[0], dBounds[2], nExtent, false);
+			nPosY = getPos(dCoords[1], dBounds[1], dBounds[3], nExtent, true);
+
+			nPointBuffer = Arrays.add(nPointBuffer, nPosX, nPosY);
+		}
+		writePointBuffer(oFeatureBuilder, nPointBuffer, nCur, false);
+		
+		return nPointBuffer;
+	}
+	
+	
+	public static void addMercPointToFeature(VectorTile.Tile.Feature.Builder oFeatureBuilder, int[] nCur, double[] dBounds, int nExtent, double dX, double dY)
+	{
+		int nPosX = getPos(dX, dBounds[0], dBounds[2], nExtent, false);
+		int nPosY = getPos(dY, dBounds[1], dBounds[3], nExtent, true);
+		
+		oFeatureBuilder.addGeometry(command(MOVETO, 1));
+		int nDeltaX = nPosX - nCur[0];
+		int nDeltaY = nPosY - nCur[1];
+		oFeatureBuilder.addGeometry(parameter(nDeltaX));
+		oFeatureBuilder.addGeometry(parameter(nDeltaY));
+		nCur[0] += nDeltaX;
+		nCur[1] += nDeltaY;
+	}
+	
+	
+	public static int[] addLinestring(VectorTile.Tile.Feature.Builder oFeatureBuilder, int[] nCur, double[] dMercBounds, int nExtent, double[] dLine, int[] nPointBuffer)
+	{
+		return addLinestring(oFeatureBuilder, nCur, dMercBounds, nExtent, 0, dLine, nPointBuffer);
+	}
+	
+	
+	public static int[] addLinestring(VectorTile.Tile.Feature.Builder oFeatureBuilder, int[] nCur, double[] dMercBounds, int nExtent, int nStartPos, double[] dLine, int[] nPointBuffer)
 	{
 		int nPosX;
 		int nPosY;
@@ -183,14 +281,15 @@ public abstract class TileUtil
 			nPosY = getPos(Mercator.latToMeters(dCoords[1]), dMercBounds[1], dMercBounds[3], nExtent, true);
 			if (dCoords[0] != dPrev[0] || dCoords[1] != dPrev[1])
 			{
-				nPointBuffer = addPoint(nPointBuffer, nPosX, nPosY);
+				nPointBuffer = Arrays.add(nPointBuffer, nPosX, nPosY);
 				dTemp = dCoords;
 				dCoords = dPrev;
 				dPrev = dTemp;
 			}
 		}
 		writePointBuffer(oFeatureBuilder, nPointBuffer, nCur, false);
-		oFeatureBuilder.setType(VectorTile.Tile.GeomType.LINESTRING);
+		
+		return nPointBuffer;
 	}
 	
 	
@@ -207,30 +306,7 @@ public abstract class TileUtil
 		nCur[0] += nDeltaX;
 		nCur[1] += nDeltaY;
 	}
-	
-	
-//	public static void addLinestring(VectorTile.Tile.Feature.Builder oFeatureBuilder, int[] nCur, double[] dMercBounds, int nExtent, double[] dLine, int[] nPointBuffer)
-//	{
-//		int[] nPos = new int[2];
-//		int[] nPrev = new int[]{Integer.MIN_VALUE, Integer.MIN_VALUE};
-//
-//		int[] nTemp;
-//		nPointBuffer[0] = 1;
-//		for (int i = 1; i < dLine.length;)
-//		{
-//			nPos[0] = getPos(Mercator.lonToMeters(dLine[i++]), dMercBounds[0], dMercBounds[2], nExtent, false);
-//			nPos[1] = getPos(Mercator.latToMeters(dLine[i++]), dMercBounds[1], dMercBounds[3], nExtent, true);
-//			if (nPos[0] != nPrev[0] || nPos[1] != nPrev[1])
-//			{
-//				nPointBuffer = addPoint(nPointBuffer, nPos[0], nPos[1]);
-//				nTemp = nPos;
-//				nPos = nPrev;
-//				nPrev = nTemp;
-//			}
-//		}
-//		writePointBuffer(oFeatureBuilder, nPointBuffer, nCur, false);
-//	}
-//	
+
 	
 	public static void writeArea(Area oArea)
 	{
@@ -252,150 +328,313 @@ public abstract class TileUtil
 	
 	public static void writePointBuffer(VectorTile.Tile.Feature.Builder oFeatureBuilder, int[] nPointBuffer, int[] nCur, boolean bClose)
 	{
-		int nStart = 1;
-		int nBound = (int)(nPointBuffer[0]);
-		int nInc = 2;
-
-		oFeatureBuilder.addGeometry(command(MOVETO, 1));
-		int i = nStart;
-		int nPosX = nPointBuffer[i];
-		int nPosY = nPointBuffer[i + 1];
-		int nDeltaX = nPosX - nCur[0];
-		int nDeltaY = nPosY - nCur[1];
-		oFeatureBuilder.addGeometry(parameter(nDeltaX));
-		oFeatureBuilder.addGeometry(parameter(nDeltaY));
-		nCur[0] += nDeltaX;
-		nCur[1] += nDeltaY;
-		i += nInc;
-		oFeatureBuilder.addGeometry(command(LINETO, nPointBuffer[0] / 2 - 1));
-		for (; i != nBound; i += nInc)
+		Iterator<int[]> oIt = Arrays.iterator(nPointBuffer, new int[2], 1, 2);
+		int nInitCurX = nCur[0];
+		int nInitCurY = nCur[1];
+		if (oIt.hasNext())
 		{
-			nPosX = nPointBuffer[i];
-			nPosY = nPointBuffer[i + 1];
-			nDeltaX = nPosX - nCur[0];
-			nDeltaY = nPosY - nCur[1];
-			oFeatureBuilder.addGeometry(parameter(nDeltaX));
-			oFeatureBuilder.addGeometry(parameter(nDeltaY));
+			int[] nPos = oIt.next();
+			
+			int nMoveX = nPos[0] - nCur[0];
+			int nMoveY = nPos[1] - nCur[1];	
+			int nDeltaX = nMoveX;
+			int nDeltaY = nMoveY;
 			nCur[0] += nDeltaX;
 			nCur[1] += nDeltaY;
+			int[] nDeltas = Arrays.newIntArray(Arrays.size(nPointBuffer));
+			while (oIt.hasNext())
+			{
+				nPos = oIt.next();
+				nDeltaX = nPos[0] - nCur[0];
+				nDeltaY = nPos[1] - nCur[1];
+				if (nDeltaX != 0 || nDeltaY != 0)
+					nDeltas = Arrays.add(nDeltas, nDeltaX, nDeltaY);
+				nCur[0] += nDeltaX;
+				nCur[1] += nDeltaY;
+			}
+			if (nDeltas[0] / 2 == 0)
+			{
+				nCur[0] = nInitCurX;
+				nCur[1] = nInitCurY;
+				return;
+			}
+			StringBuilder sBuf = new StringBuilder();
+			sBuf.append(command(MOVETO, 1)).append(',');
+			oFeatureBuilder.addGeometry(command(MOVETO, 1));
+			oFeatureBuilder.addGeometry(parameter(nMoveX));
+			oFeatureBuilder.addGeometry(parameter(nMoveY));
+			sBuf.append(parameter(nMoveX)).append(',').append(parameter(nMoveY)).append(',');
+			oFeatureBuilder.addGeometry(command(LINETO, nDeltas[0] / 2));
+			sBuf.append(command(LINETO, nDeltas[0] / 2));
+			Iterator<int[]> oDeltaIt = Arrays.iterator(nDeltas, new int[2], 1, 2);
+			while (oDeltaIt.hasNext())
+			{
+				int[] nDelta = oDeltaIt.next();
+				oFeatureBuilder.addGeometry(parameter(nDelta[0]));
+				oFeatureBuilder.addGeometry(parameter(nDelta[1]));
+				sBuf.append(',').append(parameter(nDelta[0])).append(',').append(parameter(nDelta[1]));
+			}
+			if (bClose)
+				oFeatureBuilder.addGeometry(command(CLOSEPATH, 1));
+//			System.out.println(sBuf);
 		}
-		if (bClose)
-			oFeatureBuilder.addGeometry(command(CLOSEPATH, 1));
 	}
 	
 	
-	public static int[] addPoint(int[] nPoints, int nX, int nY)
+	public static boolean includeInTile(double dX1, double dY1, double dX2, double dY2, double[] dBounds)
 	{
-		nPoints = ensureCapacity(nPoints, 2);
-		int nIndex = nPoints[0]; // extra space for hidden point
-		nPoints[nIndex++] = nX;
-		nPoints[nIndex++] = nY;
-		nPoints[0] = nIndex; // track insertion point in array
-		return nPoints;
-	}
-	
-	
-	public static double[] addPoint(double[] dPoints, double[] dPoint)
-	{
-		dPoints = ensureCapacity(dPoints, dPoint.length);
-		int nIndex = (int)dPoints[0]; // extra space for hidden point
-		dPoints[nIndex++] = dPoint[0];
-		dPoints[nIndex++] = dPoint[1];
-		dPoints[0] = nIndex; // track insertion point in array
-		return dPoints;
-	}
-	
-	
-	public static int hash(int nHrz, int nVrt)
-	{
-		return (nHrz << 16) + nVrt;
-	}
-	
-	
-	public static int[] ensureCapacity(int[] nArray, int nMinCapacity)
-    {
-        nMinCapacity += nArray[0];
-        if (nArray.length < nMinCapacity)
-        {
-            int[] dNew = new int[(nMinCapacity * 2)];
-            System.arraycopy(nArray, 0, dNew, 0, nArray.length);
-            return dNew;
-        }
-        return nArray; // no changes were needed
-    }
-
-
-    public static double[] ensureCapacity(double[] dArray, int nMinCapacity)
-    {
-		if ((int)dArray[0] + nMinCapacity < dArray.length)
-	        return dArray; // no changes were needed
-
-		double[] dNew = new double[dArray.length * 2 + nMinCapacity];
-		System.arraycopy(dArray, 0, dNew, 0, (int)dArray[0]);
-		return dNew;
-    }
-	
-	
-	public static void writeOutline(VectorTile.Tile.Feature.Builder oFeature, VectorTile.Tile.Layer.Builder oLayer, VectorTile.Tile.Builder oTile)
-	{
-		oFeature.clear();
-		oLayer.clear();
-		oLayer.setVersion(2);
-		oLayer.setName("tile_outline");
-		oLayer.setExtent(256);
-		oFeature.setType(VectorTile.Tile.GeomType.LINESTRING);
-		oFeature.addGeometry(command(MOVETO, 1));
-		oFeature.addGeometry(parameter(0));
-		oFeature.addGeometry(parameter(0));
-		oFeature.addGeometry(command(LINETO, 4));
-		oFeature.addGeometry(parameter(255));
-		oFeature.addGeometry(parameter(0));
-		oFeature.addGeometry(parameter(0));
-		oFeature.addGeometry(parameter(255));
-		oFeature.addGeometry(parameter(-255));
-		oFeature.addGeometry(parameter(0));
-		oFeature.addGeometry(parameter(0));
-		oFeature.addGeometry(parameter(-255));
-		oLayer.addFeatures(oFeature.build());
-		oFeature.clear();
-		oTile.addLayers(oLayer.build());
-		oLayer.clear();
-	}
-	
-	public static void writeBox(VectorTile.Tile.Feature.Builder oFeature, VectorTile.Tile.Layer.Builder oLayer, VectorTile.Tile.Builder oTile)
-	{
-		oFeature.clear();
-		oLayer.clear();
-		oLayer.setVersion(2);
-		oLayer.setName("MRMS_RTEPC_10.0");
-		oLayer.setExtent(256);
-		oFeature.setType(VectorTile.Tile.GeomType.POLYGON);
-		oFeature.addGeometry(command(MOVETO, 1));
-		oFeature.addGeometry(parameter(128));
-		oFeature.addGeometry(parameter(128));
-		oFeature.addGeometry(command(LINETO, 3));
-		oFeature.addGeometry(parameter(50));
-		oFeature.addGeometry(parameter(0));
-		oFeature.addGeometry(parameter(0));
-		oFeature.addGeometry(parameter(50));
-		oFeature.addGeometry(parameter(-50));
-		oFeature.addGeometry(parameter(0));
-		oFeature.addGeometry(command(CLOSEPATH, 1));
-		oLayer.addFeatures(oFeature.build());
-		oFeature.clear();
-		oTile.addLayers(oLayer.build());
-		oLayer.clear();
-	}
-	
-	
-	static Path2D.Double getPath(double[] dRing)
-	{
-		Path2D.Double oPath = new Path2D.Double();
-		oPath.moveTo(dRing[1], dRing[2]); // start at 1 because the group value is in index 0
-		for (int i = 3; i < dRing.length;)
-			oPath.lineTo(dRing[i++], dRing[i++]);
-		oPath.closePath();
+		double dXmax = Math.max(dX1, dX2);
+		double dXmin = Math.min(dX1, dX2);
+		double dYmax = Math.max(dY1, dY2);
+		double dYmin = Math.min(dY1, dY2);
 		
-		return oPath;
+		return Geo.boundingBoxesIntersect(dXmin, dYmin, dXmax, dYmax, dBounds[0], dBounds[1], dBounds[2], dBounds[3]);
+	}
+	
+	
+	public static boolean includeInTile(CtrlGeo oGeo, double[] dBounds)
+	{
+		Iterator<double[]> oNT = Arrays.iterator(oGeo.m_dNT, new double[4], 1, 2);
+		Iterator<double[]> oPT = Arrays.iterator(oGeo.m_dPT, new double[4], 1, 2);
+		if (includeInTile(oGeo.m_dNT[1], oGeo.m_dNT[2], oGeo.m_dPT[1], oGeo.m_dPT[2], dBounds))
+			return true;
+		while (oNT.hasNext())
+		{
+			double[] dSegNT = oNT.next();
+			double[] dSegPT = oPT.next();
+		
+			if (includeInTile(dSegNT[2], dSegNT[3], dSegPT[2], dSegPT[3], dBounds))
+				return true;
+		}
+			
+		return false;
+	}
+	
+	
+	public static void clipCtrlGeoForTile(CtrlGeo oGeo, double[][] dClips, double[] dBounds, ArrayList<ArrayList<double[]>> oClippedLines)
+	{
+		for (double[] dClipped : dClips)
+			dClipped[0] = 1; // reset reusable arrays
+
+		double[] dC = dClips[0];
+		double[] dNT = dClips[1];
+		double[] dPT = dClips[2];
+		
+		boolean bPrevInside = includeInTile(oGeo.m_dNT[1], oGeo.m_dNT[2], oGeo.m_dPT[1], oGeo.m_dPT[2], dBounds);
+//		boolean bPrevInside = Geo.isInside(oGeo.m_dNT[1], oGeo.m_dNT[2], dBounds[3], dBounds[2], dBounds[1], dBounds[0], 0) || 
+//							  Geo.isInside(oGeo.m_dPT[1], oGeo.m_dPT[2], dBounds[3], dBounds[2], dBounds[1], dBounds[0], 0); 
+		if (bPrevInside)
+		{
+			dC = Arrays.add(dC, oGeo.m_dC[1], oGeo.m_dC[2]);
+			dNT = Arrays.add(dNT, oGeo.m_dNT[1], oGeo.m_dNT[2]);
+			dPT = Arrays.add(dPT, oGeo.m_dPT[1], oGeo.m_dPT[2]);
+		}
+		Iterator<double[]> oC = Arrays.iterator(oGeo.m_dC, new double[4], 1, 2);
+		Iterator<double[]> oNT = Arrays.iterator(oGeo.m_dNT, new double[4], 1, 2);
+		Iterator<double[]> oPT = Arrays.iterator(oGeo.m_dPT, new double[4], 1, 2);
+		while (oC.hasNext())
+		{
+			double[] dSegC = oC.next();
+			double[] dSegNT = oNT.next();
+			double[] dSegPT = oPT.next();
+			
+			if (bPrevInside) // previous point was inside
+			{
+				if (includeInTile(dSegNT[2], dSegNT[3], dSegPT[2], dSegPT[3], dBounds))
+//				   Geo.isInside(dSegNT[2], dSegNT[3], dBounds[3], dBounds[2], dBounds[1], dBounds[0], 0) ||
+//				    Geo.isInside(dSegPT[2], dSegPT[3], dBounds[3], dBounds[2], dBounds[1], dBounds[0], 0)) // current point is inside
+				{
+					dC = Arrays.add(dC, dSegC[2], dSegC[3]);
+					dNT = Arrays.add(dNT, dSegNT[2], dSegNT[3]);
+					dPT = Arrays.add(dPT, dSegPT[2], dSegPT[3]);
+				}
+				else // current point is outside
+				{ 
+					dC = Arrays.add(dC, dSegC[2], dSegC[3]);
+					dNT = Arrays.add(dNT, dSegNT[2], dSegNT[3]);
+					dPT = Arrays.add(dPT, dSegPT[2], dSegPT[3]);
+					bPrevInside = false;
+					dClips[0] = dC;
+					dClips[1] = dNT;
+					dClips[2] = dPT;
+					for (int nIndex = 0; nIndex < dClips.length; nIndex++)
+					{
+						double[] dClipped = dClips[nIndex];
+						double[] dFinished = new double[Arrays.size(dClipped)]; // now that the line is outside the tile finish the current line
+						System.arraycopy(dClipped, 0, dFinished, 0, dFinished.length);
+						oClippedLines.get(nIndex).add(dFinished);
+						dClipped[0] = 1; // reset reusable array
+					}
+				}
+			}
+			else // previous point was outside
+			{
+				if (includeInTile(dSegNT[2], dSegNT[3], dSegPT[2], dSegPT[3], dBounds))
+//				   Geo.isInside(dSegNT[2], dSegNT[3], dBounds[3], dBounds[2], dBounds[1], dBounds[0], 0) ||
+//				    Geo.isInside(dSegPT[2], dSegPT[3], dBounds[3], dBounds[2], dBounds[1], dBounds[0], 0)) // current point is inside
+				{
+					bPrevInside = true;
+					dC = Arrays.add(dC, dSegC[0], dSegC[1]); // so add previous point, it should be in the current tile's buffered area
+					dNT = Arrays.add(dNT, dSegNT[0], dSegNT[1]);
+					dPT = Arrays.add(dPT, dSegPT[0], dSegPT[1]);
+					dC = Arrays.add(dC, dSegC[2], dSegC[3]); // and add current point
+					dNT = Arrays.add(dNT, dSegNT[2], dSegNT[3]);
+					dPT = Arrays.add(dPT, dSegPT[2], dSegPT[3]);
+				} 
+				// previous point and current point are outside, so check if the line segment intersects the tile
+				else if (includeInTile(dSegNT[2], dSegNT[3], dSegPT[2], dSegPT[3], dBounds))
+//				   Geo.boundingBoxesIntersect(dBounds[0], dBounds[1], dBounds[2], dBounds[3], dSegNT[0], dSegNT[1], dSegNT[2], dSegNT[3]) ||
+//						Geo.boundingBoxesIntersect(dBounds[0], dBounds[1], dBounds[2], dBounds[3], dSegPT[0], dSegPT[1], dSegPT[2], dSegPT[3]))  
+				{ 
+					dC = Arrays.add(dC, dSegC[0], dSegC[1]); // if it does, add both points of the segment
+					dNT = Arrays.add(dNT, dSegNT[0], dSegNT[1]);
+					dPT = Arrays.add(dPT, dSegPT[0], dSegPT[1]);
+					dC = Arrays.add(dC, dSegC[2], dSegC[3]);
+					dNT = Arrays.add(dNT, dSegNT[2], dSegNT[3]);
+					dPT = Arrays.add(dPT, dSegPT[2], dSegPT[3]);
+					dClips[0] = dC;
+					dClips[1] = dNT;
+					dClips[2] = dPT;
+					for (int nIndex = 0; nIndex < dClips.length; nIndex++)
+					{
+						double[] dClipped = dClips[nIndex];
+						double[] dFinished = new double[Arrays.size(dClipped)]; // now that the line is outside the tile finish the current line
+						System.arraycopy(dClipped, 0, dFinished, 0, dFinished.length);
+						oClippedLines.get(nIndex).add(dFinished);
+						dClipped[0] = 1; // reset reusable array
+					}
+				}
+			}
+		}
+		
+		if (Arrays.size(dC) > 3) // if the remaining line has more than 2 points
+		{
+			dClips[0] = dC;
+			dClips[1] = dNT;
+			dClips[2] = dPT;
+			for (int nIndex = 0; nIndex < dClips.length; nIndex++)
+			{
+				double[] dClipped = dClips[nIndex];
+				double[] dFinished = new double[Arrays.size(dClipped)]; // now that the line is outside the tile finish the current line
+				System.arraycopy(dClipped, 0, dFinished, 0, dFinished.length);
+				oClippedLines.get(nIndex).add(dFinished);
+			}
+		}
+	}
+	
+	
+	public static void clipLineString(double[] dLine, double[] dBounds, ArrayList<double[]> oClipped)
+	{
+		clipLineString(dLine, 1, dBounds, oClipped);
+	}
+	
+	
+	public static void clipLineString(double[] dLine, int nStart, double[] dBounds, ArrayList<double[]> oClipped)
+	{
+		double[] dClipped = Arrays.newDoubleArray();
+		
+		boolean bPrevInside = Geo.isInside(dLine[nStart], dLine[nStart + 1], dBounds[3], dBounds[2], dBounds[1], dBounds[0], 0);
+		   
+		if (bPrevInside)
+			dClipped = Arrays.add(dClipped, dLine[nStart], dLine[nStart + 1]);
+
+		Iterator<double[]> oIt = Arrays.iterator(dLine, new double[4], nStart, 2);
+		while (oIt.hasNext())
+		{
+			double[] dSeg = oIt.next();
+			
+			if (bPrevInside) // previous point was inside
+			{
+				if (Geo.isInside(dSeg[2], dSeg[3], dBounds[3], dBounds[2], dBounds[1], dBounds[0], 0))
+				{
+					dClipped = Arrays.add(dClipped, dSeg[2], dSeg[3]);
+				}
+				else // current point is outside
+				{ 
+					dClipped = Arrays.add(dClipped, dSeg[2], dSeg[3]);
+					bPrevInside = false;
+
+					double[] dFinished = new double[Arrays.size(dClipped)]; // now that the line is outside the tile finish the current line
+					System.arraycopy(dClipped, 0, dFinished, 0, dFinished.length);
+					oClipped.add(dFinished);
+					dClipped[0] = 1; // reset reusable array
+				}
+			}
+			else // previous point was outside
+			{
+				if (Geo.isInside(dSeg[2], dSeg[3], dBounds[3], dBounds[2], dBounds[1], dBounds[0], 0)) // current point is inside
+				{
+					bPrevInside = true;
+					dClipped = Arrays.add(dClipped, dSeg[0], dSeg[1]);
+					dClipped = Arrays.add(dClipped, dSeg[2], dSeg[3]);
+				} 
+				// previous point and current point are outside, so check if the line segment intersects the tile
+				else if (Geo.boundingBoxesIntersect(dBounds[0], dBounds[1], dBounds[2], dBounds[3], dSeg[0], dSeg[1], dSeg[2], dSeg[3])) 
+				{ 
+					dClipped = Arrays.add(dClipped, dSeg[0], dSeg[1]);
+					dClipped = Arrays.add(dClipped, dSeg[2], dSeg[3]);
+
+					double[] dFinished = new double[Arrays.size(dClipped)]; // now that the line is outside the tile finish the current line
+					System.arraycopy(dClipped, 0, dFinished, 0, dFinished.length);
+					oClipped.add(dFinished);
+					dClipped[0] = 1; // reset reusable array
+				}
+			}
+		}
+		
+		if (Arrays.size(dClipped) > 3) // if the remaining line has more than 2 points
+		{
+			double[] dFinished = new double[Arrays.size(dClipped)]; // now that the line is outside the tile finish the current line
+			System.arraycopy(dClipped, 0, dFinished, 0, dFinished.length);
+			oClipped.add(dFinished);
+		}
+	}
+	
+	
+	public static double[] getTileBounds(int nZ, int nX, int nY)
+	{
+		double[] dBounds = new double[4];
+		Mercator oM = Mercator.getInstance();
+		oM.tileBounds(nX, nY, nZ, dBounds);
+		
+		return dBounds;
+	}
+	
+	
+	public static double[] getClippingBounds(int nZ, int nX, int nY, double[] dBounds)
+	{
+		Mercator oM = Mercator.getInstance();
+		double dPadding = oM.resolution(nZ) * 8;
+		double[] dClip = new double[4];
+		dClip[0] = dBounds[0] - dPadding;
+		dClip[1] = dBounds[1] - dPadding;
+		dClip[2] = dBounds[2] + dPadding;
+		dClip[3] = dBounds[3] + dPadding;
+		
+		return dClip;
+	}
+	
+	
+	public static double[] getClippingBounds(int nZ, int nX, int nY)
+	{
+		return getClippingBounds(nZ, nX, nY, getTileBounds(nZ, nX, nY));
+	}
+	
+	
+	public static Area getClippingArea(int nZ, int nX, int nY, double[] dClipBounds)
+	{
+		Path2D.Double oTilePath = new Path2D.Double(); // create clipping boundary
+		oTilePath.moveTo(dClipBounds[0], dClipBounds[1]);
+		oTilePath.lineTo(dClipBounds[0], dClipBounds[3]);
+		oTilePath.lineTo(dClipBounds[2], dClipBounds[3]);
+		oTilePath.lineTo(dClipBounds[2], dClipBounds[1]);
+		oTilePath.closePath();
+		return new Area(oTilePath);
+	}
+	
+	
+	public static Area getClippingArea(int nZ, int nX, int nY)
+	{
+		return getClippingArea(nZ, nX, nY, getClippingBounds(nZ, nX, nY));
 	}
 }

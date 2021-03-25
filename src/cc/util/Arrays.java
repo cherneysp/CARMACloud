@@ -1,5 +1,6 @@
 package cc.util;
 
+import java.io.PrintStream;
 import java.util.Iterator;
 
 
@@ -70,6 +71,21 @@ public abstract class Arrays
 		dVals[nIndex++] = d1;
 		dVals[nIndex++] = d2;
 		dVals[0] = (double)nIndex; // track insertion position
+		return dVals;
+	}
+	
+	
+	public static double[] addAndUpdate(double[] dVals, double d1, double d2)
+	{
+		dVals = add(dVals, d1, d2);
+		if (d1 < dVals[1]) // update bounding box stored in indeces 1-4
+			dVals[1] = d1;
+		if (d2 < dVals[2])
+			dVals[2] = d2;
+		if (d1 > dVals[3])
+			dVals[3] = d1;
+		if (d2 > dVals[4])
+			dVals[4] = d2;
 		return dVals;
 	}
 
@@ -149,8 +165,62 @@ public abstract class Arrays
 		nVals[0] = nIndex + nMore.length; // track insertion position
 		return nVals;
 	}
+	
+	
+	public static int[] insert(int[] nVals, int n1, int nIndex)
+	{
+		nVals = ensureCapacity(nVals, 1);
+        System.arraycopy(nVals, nIndex, nVals, nIndex + 1, nVals[0] - nIndex);
+		nVals[nIndex] = n1;
+        ++nVals[0];
+		return nVals;
+	}
+	
+	
+	public static int binarySearch(int[] nVals, int n1)
+	{
+		return java.util.Arrays.binarySearch(nVals, 1, nVals[0], n1);
+	}
+	
+	
+	public static void printArray(double[] dArray, int nStart, PrintStream oPrint) throws Exception
+	{
+		Iterator<double[]> oIt = iterator(dArray, new double[1], nStart, 1);
+		boolean bWrite = oIt.hasNext();
+		if (bWrite)
+		{
+			double[] dVal = oIt.next();
+			oPrint.append(Double.toString(dVal[0]));
+		}
+		while (oIt.hasNext())
+		{
+			double[] dVal = oIt.next();
+			oPrint.append(",").append(Double.toString(dVal[0]));
+		}
+		if (bWrite)
+			oPrint.append("\n");
+	}
 
 
+	public static void printArray(int[] nArray, int nStart, PrintStream oPrint) throws Exception
+	{
+		Iterator<int[]> oIt = iterator(nArray, new int[1], nStart, 1);
+		boolean bWrite = oIt.hasNext();
+		if (bWrite)
+		{
+			int[] nVal = oIt.next();
+			oPrint.append(Integer.toString(nVal[0]));
+		}
+		while (oIt.hasNext())
+		{
+			int[] nVal = oIt.next();
+			oPrint.append(",").append(Integer.toString(nVal[0]));
+		}
+		if (bWrite)
+			oPrint.append("\n");
+	}
+	
+	
 	private static abstract class GroupIterator
 	{
 		protected int m_nPos;
